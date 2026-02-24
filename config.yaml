@@ -1,0 +1,39 @@
+# AI API PreLayer 默认配置文件
+# 所有配置项均支持环境变量覆盖
+
+# 服务器配置
+server:
+  # 监听端口
+  port: 3000
+  # 监听地址，0.0.0.0 表示监听所有网络接口
+  host: "0.0.0.0"
+  # 请求体最大大小
+  maxPayloadSize: "50mb"
+
+# 处理器配置
+processors:
+  # 图片处理器
+  image:
+    # 是否启用图片处理器
+    enabled: true
+    # 输出配置
+    output:
+      # 输出格式：webp | jpeg | png
+      format: "webp"
+      # 输出质量 (0-100)
+      quality: 80
+      # WebP 编码努力程度 (0-6，值越大压缩越好但越慢)
+      effort: 4
+    # 尺寸限制配置
+    resize:
+      # 最大宽度（像素），超出则等比缩小
+      maxWidth: 2048
+      # 最大高度（像素），超出则等比缩小
+      maxHeight: 2048
+
+# 日志配置
+logging:
+  # 日志级别：debug | info | warn | error
+  level: "info"
+  # 日志格式：json | text
+  format: "json"
