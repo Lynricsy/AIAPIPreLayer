@@ -112,6 +112,54 @@ curl http://localhost:3000/api.anthropic.com/v1/messages \
 
 > 🖼️ 请求中的 base64 图片会被自动转换为 WebP 格式，显著减小请求体积。
 
+### OpenAI Responses
+
+```bash
+curl -X POST http://localhost:3000/api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-4o",
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "input_text", "text": "这张图片是什么？" },
+          {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,iVBORw0KGgo..."
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+### Gemini GenerateContent
+
+```bash
+curl -X POST "http://localhost:3000/generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$GEMINI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          { "text": "描述这张图片的内容" },
+          {
+            "inlineData": {
+              "mimeType": "image/png",
+              "data": "iVBORw0KGgo..."
+            }
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+> 💡 所有格式的图片都会被自动检测并转换，无需额外配置。
+
 ## ⚙️ 配置参考
 
 配置文件为项目根目录下的 `config.yaml`，完整选项如下：
@@ -174,13 +222,29 @@ Client Request
 (OpenAI / Anthropic / Gemini)
 ```
 
-**处理流程：**
+### 🔍 工作原理
 
-1. 解析请求 URL，提取目标主机与路径
-2. 检测 API 格式（OpenAI Chat / Responses / Anthropic / Gemini）
-3. 对 JSON 请求体执行预处理器管道（图片转 WebP 等）
-4. 转发处理后的请求到目标 API
-5. 将响应原样返回客户端（SSE 流式响应直通）
+以一次带图片的 OpenAI Chat 请求为例，完整流程如下：
+
+1. **客户端发起请求** — 将目标 API 地址嵌入代理 URL，例如 `http://proxy:3000/api.openai.com/v1/chat/completions`
+2. **URL 路由解析** — 代理从请求路径中提取目标主机 `api.openai.com` 和路径 `/v1/chat/completions`，拼接为 `https://api.openai.com/v1/chat/completions`
+3. **API 格式检测** — 根据主机名 + 路径模式自动识别请求属于哪种 API 格式（OpenAI Chat / Responses / Anthropic / Gemini），决定后续如何遍历请求体
+4. **请求体解析** — 读取 JSON 请求体，交由预处理器管道依次处理
+5. **图片节点遍历** — `ImageProcessor` 按照检测到的 API 格式，深度遍历 JSON 结构，定位所有 base64 编码的图片节点（不同格式的图片字段位置各不相同）
+6. **图片转换** — 对每个检测到的 base64 图片，通过 Sharp 解码、压缩、转换为 WebP 格式（可配置质量与尺寸上限），再重新编码为 base64 写回原位
+7. **转发请求** — 将处理后的请求体以正确的 `Content-Length` 转发到真实 API，原始请求头（含认证信息）原样透传
+8. **响应直通** — API 返回的响应（包括 SSE 流式响应）直接传回客户端，代理不做任何修改
+
+> 📦 **压缩效果**：以一张 1MB 的 PNG 截图为例，转换为 WebP 后通常可压缩到 100~300KB，token 花费不变但传输速度大幅提升。
+
+**各格式图片字段位置对照：**
+
+| API 格式 | 图片定位路径 | base64 存储方式 |
+|----------|------------|----------------|
+| OpenAI Chat | `messages[].content[].image_url.url` | data URI（`data:image/png;base64,...`） |
+| OpenAI Responses | `input[].content[].image_url` | data URI（`data:image/png;base64,...`） |
+| Anthropic | `messages[].content[].source.data` | 纯 base64 + `media_type` 字段 |
+| Gemini | `contents[].parts[].inlineData.data` | 纯 base64 + `mimeType` 字段 |
 
 ## 🛠️ 开发指南
 
@@ -209,20 +273,51 @@ bun run typecheck
 
 ```
 src/
+├── index.ts               # 应用入口
 ├── config.ts              # 配置加载与验证
 ├── pipeline.ts            # 预处理器管道管理
 ├── proxy.ts               # 代理引擎（请求转发 + SSE 直通）
+├── registry.ts            # 处理器注册中心
 ├── routing.ts             # URL 路由解析 + API 格式检测
 ├── types/
-│   └── index.ts           # 核心类型定义
+│   ├── index.ts           # 核心类型定义
+│   └── api-formats.ts    # 四种 API 请求格式的类型定义
 ├── processors/
+│   ├── post-processor.ts  # 后处理器管道管理
 │   └── image/
-│       └── converter.ts   # 图片格式转换（base64 → WebP）
+│       ├── index.ts       # ImageProcessor 入口（组装遍历 + 转换）
+│       ├── traversal.ts   # JSON 遍历：按 API 格式定位 base64 图片节点
+│       └── converter.ts   # 图片格式转换（base64 → WebP via Sharp）
 └── utils/
-    ├── base64.ts          # Base64 编解码
+    ├── base64.ts          # Base64 编解码与 data URI 解析
     ├── errors.ts          # 自定义错误类
     ├── logger.ts          # 结构化日志
     └── mime.ts            # MIME 类型工具
+
+test/
+├── fixtures/              # 测试用 JSON 固定数据
+│   ├── openai-chat.json
+│   ├── openai-responses.json
+│   ├── anthropic-messages.json
+│   ├── gemini-generate.json
+│   ├── mixed-content.json
+│   └── no-images.json
+├── config.test.ts
+├── converter.test.ts
+├── errors.test.ts
+├── image-processor.test.ts
+├── logger.test.ts
+├── pipeline.test.ts
+├── post-processor.test.ts
+├── proxy.test.ts
+├── registry.test.ts
+├── routing.test.ts
+├── server.test.ts
+├── traversal.test.ts
+├── types.test.ts
+└── utils.test.ts
+
+config.yaml                # 默认配置文件
 ```
 
 ## 📄 License
