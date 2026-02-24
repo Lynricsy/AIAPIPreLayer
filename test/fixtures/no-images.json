@@ -1,0 +1,22 @@
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "system",
+      "content": "You are a helpful assistant."
+    },
+    {
+      "role": "user",
+      "content": "Hello, how are you?"
+    },
+    {
+      "role": "assistant",
+      "content": "I'm doing well, thank you! How can I help you today?"
+    },
+    {
+      "role": "user",
+      "content": "Can you summarize the main differences between REST and GraphQL?"
+    }
+  ],
+  "max_tokens": 512
+}

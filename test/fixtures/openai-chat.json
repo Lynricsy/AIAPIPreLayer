@@ -1,0 +1,45 @@
+{
+  "model": "gpt-4o",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "text",
+          "text": "What is in this image?"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": "This appears to be a 1x1 pixel red image."
+    },
+    {
+      "role": "tool",
+      "tool_call_id": "call_abc123",
+      "content": [
+        {
+          "type": "text",
+          "text": "Tool result with image"
+        },
+        {
+          "type": "image_url",
+          "image_url": {
+            "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": "Can you analyze it further?"
+    }
+  ],
+  "max_tokens": 512
+}

@@ -1,0 +1,51 @@
+{
+  "model": "gpt-4o",
+  "input": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "What is in this image?"
+        },
+        {
+          "type": "input_image",
+          "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "This appears to be a 1x1 pixel red image."
+        }
+      ]
+    },
+    {
+      "type": "tool_result",
+      "tool_use_id": "tool_abc123",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Tool returned this image"
+        },
+        {
+          "type": "input_image",
+          "image_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "Can you analyze it further?"
+        }
+      ]
+    }
+  ],
+  "max_output_tokens": 512
+}
