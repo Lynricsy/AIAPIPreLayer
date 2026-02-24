@@ -112,6 +112,11 @@ logging:
     expect(config.server.host).toBe('127.0.0.1');
   });
 
+  test('AIAPL_PORT 为非数字时抛出错误', () => {
+    process.env['AIAPL_PORT'] = 'not-a-number';
+    expect(() => loadConfig('./config.yaml')).toThrow(/AIAPL_PORT/);
+  });
+
   test('端口为 0 时抛出错误', () => {
     writeTmpConfig(`
 server:
@@ -156,5 +161,42 @@ logging:
   format: "json"
 `);
     expect(() => loadConfig(TMP_CONFIG)).toThrow(/端口/);
+  });
+
+  test('maxPayloadSize 为空字符串时抛出错误', () => {
+    writeTmpConfig(`
+server:
+  port: 3000
+  host: "0.0.0.0"
+  maxPayloadSize: ""
+processors:
+  image:
+    enabled: true
+    output:
+      format: "webp"
+      quality: 80
+      effort: 4
+    resize:
+      maxWidth: 2048
+      maxHeight: 2048
+logging:
+  level: "info"
+  format: "json"
+`);
+
+    expect(() => loadConfig(TMP_CONFIG)).toThrow(/maxPayloadSize/);
+  });
+
+  test('非法 logging 值会回退到默认值', () => {
+    writeTmpConfig(`
+logging:
+  level: "trace"
+  format: "pretty"
+`);
+
+    const config = loadConfig(TMP_CONFIG);
+
+    expect(config.logging.level).toBe('info');
+    expect(config.logging.format).toBe('json');
   });
 });

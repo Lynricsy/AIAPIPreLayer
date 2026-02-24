@@ -25,6 +25,15 @@ describe('parseDataUri', () => {
     expect(parseDataUri('')).toBeNull();
     expect(parseDataUri('data:image/png')).toBeNull();
   });
+
+  test('supports multiline base64 payloads in data URI', () => {
+    const uri = 'data:image/png;base64,abc\ndef';
+    const result = parseDataUri(uri);
+
+    expect(result).not.toBeNull();
+    expect(result?.mimeType).toBe('image/png');
+    expect(result?.base64Data).toBe('abc\ndef');
+  });
 });
 
 describe('buildDataUri', () => {
@@ -52,12 +61,43 @@ describe('decodeBase64 / encodeBase64', () => {
     const reencoded = encodeBase64(decoded);
     expect(reencoded).toBe(PNG_BASE64);
   });
+
+  test('handles empty base64 input', () => {
+    const decoded = decodeBase64('');
+
+    expect(decoded).toBeInstanceOf(Buffer);
+    expect(decoded.length).toBe(0);
+    expect(encodeBase64(decoded)).toBe('');
+  });
 });
 
 describe('detectMimeType', () => {
   test('correctly identifies PNG magic bytes from real base64', () => {
     const mime = detectMimeType(PNG_BASE64);
     expect(mime).toBe('image/png');
+  });
+
+  test('correctly identifies JPEG, GIF, and WebP magic bytes', () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xdb, 0x00, 0x00]).toString('base64');
+    const gif = Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]).toString('base64');
+    const webp = Buffer.from([
+      0x52,
+      0x49,
+      0x46,
+      0x46,
+      0x24,
+      0x00,
+      0x00,
+      0x00,
+      0x57,
+      0x45,
+      0x42,
+      0x50,
+    ]).toString('base64');
+
+    expect(detectMimeType(jpeg)).toBe('image/jpeg');
+    expect(detectMimeType(gif)).toBe('image/gif');
+    expect(detectMimeType(webp)).toBe('image/webp');
   });
 
   test('returns null for non-image base64', () => {
@@ -80,6 +120,10 @@ describe('isBase64Image', () => {
     const plainText = Buffer.from('Hello, world!').toString('base64');
     expect(isBase64Image(plainText)).toBe(false);
     expect(isBase64Image('just plain text')).toBe(false);
+  });
+
+  test('returns false for non-image data URI', () => {
+    expect(isBase64Image('data:text/plain;base64,SGVsbG8=')).toBe(false);
   });
 });
 
