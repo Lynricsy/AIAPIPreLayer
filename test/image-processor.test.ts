@@ -35,6 +35,11 @@ const APP_CONFIG: AppConfig = {
   },
   processors: {
     image: IMAGE_CONFIG,
+    encryptedReasoning: {
+      enabled: true,
+      maxRetries: 2,
+      preambleTimeoutMs: 5000,
+    },
   },
   logging: {
     level: 'info',

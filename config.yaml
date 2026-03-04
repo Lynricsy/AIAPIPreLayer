@@ -31,6 +31,15 @@ processors:
       # 最大高度（像素），超出则等比缩小
       maxHeight: 2048
 
+  # 加密推理重试处理器
+  encryptedReasoning:
+    # 是否启用加密推理重试处理器
+    enabled: true
+    # 最大重试次数 (1-5)：2 表示先丢弃最后一段，再丢弃全部推理内容后各重试一次
+    maxRetries: 2
+    # SSE 前导事件缓冲超时时长（毫秒，1000-30000）：在此时间内未收到错误则认为请求正常
+    preambleTimeoutMs: 5000
+
 # 日志配置
 logging:
   # 日志级别：debug | info | warn | error

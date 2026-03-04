@@ -51,9 +51,17 @@ export interface LoggingConfig {
   format: 'json' | 'text';
 }
 
+/** 加密推理重试处理器配置 */
+export interface EncryptedReasoningProcessorConfig {
+  enabled: boolean;
+  maxRetries: number;
+  preambleTimeoutMs: number;
+}
+
 /** 处理器配置 */
 export interface ProcessorsConfig {
   image: ImageProcessorConfig;
+  encryptedReasoning: EncryptedReasoningProcessorConfig;
 }
 
 /** 应用整体配置 */

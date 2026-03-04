@@ -47,5 +47,10 @@ export function detectApiFormat(host: string, path: string): ApiFormat {
     return 'gemini';
   }
 
+  // 通用路径匹配：支持 OpenAI API 中继服务（如 codehub.ling.plus）
+  // 优先级低于上方的 host-specific 规则，仅作为兜底匹配
+  if (path.startsWith('/v1/responses')) return 'openai-responses';
+  if (path.startsWith('/v1/chat/completions')) return 'openai-chat';
+
   return 'unknown';
 }

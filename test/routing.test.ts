@@ -102,3 +102,25 @@ describe('detectApiFormat', () => {
     );
   });
 });
+
+describe('detectApiFormat - relay host path detection', () => {
+  test('unknown host with /v1/responses returns openai-responses', () => {
+    expect(detectApiFormat('relay.example.com', '/v1/responses')).toBe('openai-responses');
+  });
+
+  test('unknown host with /v1/chat/completions returns openai-chat', () => {
+    expect(detectApiFormat('relay.example.com', '/v1/chat/completions')).toBe('openai-chat');
+  });
+
+  test('codehub.ling.plus with /v1/responses returns openai-responses', () => {
+    expect(detectApiFormat('codehub.ling.plus', '/v1/responses')).toBe('openai-responses');
+  });
+
+  test('unknown host with /v1/other returns unknown', () => {
+    expect(detectApiFormat('relay.example.com', '/v1/other')).toBe('unknown');
+  });
+
+  test('known hosts still use host-specific rules', () => {
+    expect(detectApiFormat('api.openai.com', '/v1/responses')).toBe('openai-responses');
+  });
+});

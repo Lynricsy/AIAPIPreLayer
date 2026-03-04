@@ -8,6 +8,7 @@ import type {
   ImageOutputConfig,
   ImageResizeConfig,
   LoggingConfig,
+  EncryptedReasoningProcessorConfig,
 } from './types/index.ts';
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -28,6 +29,11 @@ export const DEFAULT_CONFIG: AppConfig = {
         maxWidth: 2048,
         maxHeight: 2048,
       },
+    },
+    encryptedReasoning: {
+      enabled: true,
+      maxRetries: 2,
+      preambleTimeoutMs: 5000,
     },
   },
   logging: {
@@ -117,8 +123,36 @@ function parseImageProcessorConfig(raw: unknown): ImageProcessorConfig {
   };
 }
 
+function validateMaxRetries(value: number): void {
+  if (!Number.isInteger(value) || value < 1 || value > 5) {
+    throw new Error(`无效的 maxRetries 值: ${value}，maxRetries 必须在 1-5 范围内`);
+  }
+}
+
+function validatePreambleTimeoutMs(value: number): void {
+  if (!Number.isInteger(value) || value < 1000 || value > 30000) {
+    throw new Error(`无效的 preambleTimeoutMs 值: ${value}，preambleTimeoutMs 必须在 1000-30000 范围内`);
+  }
+}
+
+function parseEncryptedReasoningConfig(raw: unknown): EncryptedReasoningProcessorConfig {
+  const def = DEFAULT_CONFIG.processors.encryptedReasoning;
+  const maxRetries = getNum(raw, 'maxRetries') ?? def.maxRetries;
+  const preambleTimeoutMs = getNum(raw, 'preambleTimeoutMs') ?? def.preambleTimeoutMs;
+  validateMaxRetries(maxRetries);
+  validatePreambleTimeoutMs(preambleTimeoutMs);
+  return {
+    enabled: getBool(raw, 'enabled') ?? def.enabled,
+    maxRetries,
+    preambleTimeoutMs,
+  };
+}
+
 function parseProcessorsConfig(raw: unknown): ProcessorsConfig {
-  return { image: parseImageProcessorConfig(getObj(raw, 'image')) };
+  return {
+    image: parseImageProcessorConfig(getObj(raw, 'image')),
+    encryptedReasoning: parseEncryptedReasoningConfig(getObj(raw, 'encryptedReasoning')),
+  };
 }
 
 function parseServerConfig(raw: unknown): ServerConfig {

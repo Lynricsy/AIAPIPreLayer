@@ -21,6 +21,11 @@ const TEST_CONFIG: AppConfig = {
         maxHeight: 2048,
       },
     },
+    encryptedReasoning: {
+      enabled: true,
+      maxRetries: 2,
+      preambleTimeoutMs: 5000,
+    },
   },
   logging: {
     level: 'info',

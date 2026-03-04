@@ -110,6 +110,9 @@ function createTestConfig(imageEnabled = true): AppConfig {
           ...DEFAULT_CONFIG.processors.image.resize,
         },
       },
+      encryptedReasoning: {
+        ...DEFAULT_CONFIG.processors.encryptedReasoning,
+      },
     },
     logging: {
       ...DEFAULT_CONFIG.logging,

@@ -22,6 +22,11 @@ const baseConfig: AppConfig = {
         maxHeight: 2048,
       },
     },
+    encryptedReasoning: {
+      enabled: true,
+      maxRetries: 2,
+      preambleTimeoutMs: 5000,
+    },
   },
   logging: {
     level: 'info',
@@ -35,6 +40,7 @@ describe('createProcessorRegistry', () => {
       ...baseConfig,
       processors: {
         image: { ...baseConfig.processors.image, enabled: true },
+        encryptedReasoning: { ...baseConfig.processors.encryptedReasoning },
       },
     };
 
@@ -50,6 +56,7 @@ describe('createProcessorRegistry', () => {
       ...baseConfig,
       processors: {
         image: { ...baseConfig.processors.image, enabled: false },
+        encryptedReasoning: { ...baseConfig.processors.encryptedReasoning },
       },
     };
 
