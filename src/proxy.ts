@@ -490,11 +490,18 @@ export function createProxyHandler(
       });
     } catch (error) {
       if (error instanceof RoutingError) {
+        logger.warn('Routing error', { error: error.message });
         return jsonError(400, error.message);
       }
 
       if (error instanceof PayloadTooLargeError) {
+        logger.warn('Payload too large', { error: error.message });
         return jsonError(413, error.message);
+      }
+
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        logger.info('Client disconnected', { error: error.message });
+        return new Response(null, { status: 499, statusText: 'Client Closed Request' });
       }
 
       logger.error('Proxy request failed', {
