@@ -123,4 +123,20 @@ describe('detectApiFormat - relay host path detection', () => {
   test('known hosts still use host-specific rules', () => {
     expect(detectApiFormat('api.openai.com', '/v1/responses')).toBe('openai-responses');
   });
+
+  test('subpath relay with /codex/v1/responses returns openai-responses', () => {
+    expect(detectApiFormat('right.codes', '/codex/v1/responses')).toBe('openai-responses');
+  });
+
+  test('subpath relay with /codex/v1/chat/completions returns openai-chat', () => {
+    expect(detectApiFormat('right.codes', '/codex/v1/chat/completions')).toBe('openai-chat');
+  });
+
+  test('subpath relay with /codex/v1/messages returns anthropic', () => {
+    expect(detectApiFormat('right.codes', '/codex/v1/messages')).toBe('anthropic');
+  });
+
+  test('subpath relay with /codex/v1beta/models/gemini:generateContent returns gemini', () => {
+    expect(detectApiFormat('right.codes', '/codex/v1beta/models/gemini:generateContent')).toBe('gemini');
+  });
 });

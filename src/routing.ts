@@ -47,10 +47,11 @@ export function detectApiFormat(host: string, path: string): ApiFormat {
     return 'gemini';
   }
 
-  // 通用路径匹配：支持 OpenAI API 中继服务（如 codehub.ling.plus）
-  // 优先级低于上方的 host-specific 规则，仅作为兜底匹配
-  if (path.startsWith('/v1/responses')) return 'openai-responses';
-  if (path.startsWith('/v1/chat/completions')) return 'openai-chat';
+  // 兜底路径匹配：兼容带子路径的中继服务（如 right.codes/codex/v1/responses）
+  if (path.includes('/v1/responses')) return 'openai-responses';
+  if (path.includes('/v1/chat/completions')) return 'openai-chat';
+  if (path.includes('/v1/messages')) return 'anthropic';
+  if (path.includes('generateContent')) return 'gemini';
 
   return 'unknown';
 }

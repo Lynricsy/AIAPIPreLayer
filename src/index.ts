@@ -26,5 +26,6 @@ export { app, config };
 export default {
   port: config.server.port,
   hostname: config.server.host,
+  idleTimeout: 120,
   fetch: app.fetch,
 };

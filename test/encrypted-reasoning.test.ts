@@ -288,3 +288,98 @@ describe('dropAllReasoningEncryptedContent', () => {
     expect(r.content[0]).not.toHaveProperty('encrypted_content');
   });
 });
+
+function makeBodyTopLevel(reasoningItems: Array<{ encrypted?: string }>) {
+  return {
+    model: 'gpt-5.2',
+    input: [
+      { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'hello' }] },
+      ...reasoningItems.map((r, i) => ({
+        type: 'reasoning' as const,
+        id: `rs_${i}`,
+        ...(r.encrypted
+          ? { encrypted_content: r.encrypted, summary: 'some summary' }
+          : { summary: 'some reasoning without encryption' }),
+      })),
+    ],
+  };
+}
+
+describe('hasEncryptedReasoningContent (top-level format)', () => {
+  test('returns true when reasoning has top-level encrypted_content', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'gAAAA_abc' }]);
+    expect(hasEncryptedReasoningContent(body)).toBe(true);
+  });
+
+  test('returns true with multiple reasoning items, one encrypted', () => {
+    const body = makeBodyTopLevel([{}, { encrypted: 'gAAAA_xyz' }]);
+    expect(hasEncryptedReasoningContent(body)).toBe(true);
+  });
+
+  test('returns false when no encrypted_content', () => {
+    const body = makeBodyTopLevel([{}, {}]);
+    expect(hasEncryptedReasoningContent(body)).toBe(false);
+  });
+});
+
+describe('dropLastReasoningEncryptedContent (top-level format)', () => {
+  test('drops top-level encrypted_content from last reasoning', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'first' }, { encrypted: 'last' }]);
+    const result = dropLastReasoningEncryptedContent(body);
+    expect(result.changed).toBe(true);
+    const newBody = result.body as any;
+    expect(newBody.input[1]).toHaveProperty('encrypted_content', 'first');
+    expect(newBody.input[2]).not.toHaveProperty('encrypted_content');
+    expect(newBody.input[2]).toHaveProperty('summary', 'some summary');
+  });
+
+  test('does not mutate original body', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'secret' }]);
+    const result = dropLastReasoningEncryptedContent(body);
+    expect(result.body).not.toBe(body);
+    expect((body.input[1] as any).encrypted_content).toBe('secret');
+  });
+
+  test('returns changed=false when last reasoning has no encrypted_content', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'first' }, {}]);
+    const result = dropLastReasoningEncryptedContent(body);
+    expect(result.changed).toBe(false);
+    expect(result.body).toBe(body);
+  });
+});
+
+describe('dropAllReasoningEncryptedContent (top-level format)', () => {
+  test('drops top-level encrypted_content from all reasoning items', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'first' }, { encrypted: 'second' }]);
+    const result = dropAllReasoningEncryptedContent(body);
+    expect(result.changed).toBe(true);
+    const newBody = result.body as any;
+    expect(newBody.input[1]).not.toHaveProperty('encrypted_content');
+    expect(newBody.input[2]).not.toHaveProperty('encrypted_content');
+    expect(newBody.input[1]).toHaveProperty('summary');
+    expect(newBody.input[2]).toHaveProperty('summary');
+  });
+
+  test('does not mutate original body', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'a' }, { encrypted: 'b' }]);
+    const result = dropAllReasoningEncryptedContent(body);
+    expect(result.body).not.toBe(body);
+    expect((body.input[1] as any).encrypted_content).toBe('a');
+    expect((body.input[2] as any).encrypted_content).toBe('b');
+  });
+
+  test('partial: only encrypted items are cleared', () => {
+    const body = makeBodyTopLevel([{ encrypted: 'yes' }, {}]);
+    const result = dropAllReasoningEncryptedContent(body);
+    expect(result.changed).toBe(true);
+    const newBody = result.body as any;
+    expect(newBody.input[1]).not.toHaveProperty('encrypted_content');
+  });
+
+  test('returns changed=false when no encrypted_content exists', () => {
+    const body = makeBodyTopLevel([{}, {}]);
+    const result = dropAllReasoningEncryptedContent(body);
+    expect(result.changed).toBe(false);
+    expect(result.body).toBe(body);
+  });
+});
