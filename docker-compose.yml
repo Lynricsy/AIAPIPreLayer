@@ -1,0 +1,37 @@
+# =============================================================================
+# AIAPIPreLayer — Docker Compose 编排配置
+# =============================================================================
+# 单服务部署配置，用于运行 Bun 驱动的 AI API 预处理代理
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # prelayer 服务：AI API 预处理代理
+  # 基于项目 Dockerfile 构建，以非 root 用户运行
+  # ---------------------------------------------------------------------------
+  prelayer:
+    # 使用当前目录的 Dockerfile 构建镜像
+    build: .
+    # 容器名称，便于通过 docker exec 等命令直接操作
+    container_name: aiapl
+    # 端口映射：宿主机 3000 → 容器 3000
+    ports:
+      - "3000:3000"
+    # 卷挂载：将宿主机的配置文件只读挂载到容器内
+    # 注意：镜像中不包含 config.yaml，必须通过 volume 提供
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+    # 重启策略：除手动停止外自动重启（适合生产部署）
+    restart: unless-stopped
+    # 健康检查：通过 bun 内置 fetch 检测服务是否响应
+    # 使用 bun -e 而非 curl，因为 oven/bun:1-slim 基础镜像未预装 curl
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"try { await fetch('http://localhost:3000/'); process.exit(0); } catch { process.exit(1); }\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # 环境变量（按需取消注释以覆盖默认值）
+    # environment:
+    #   - AIAPL_PORT=3000
+    #   - AIAPL_HOST=0.0.0.0

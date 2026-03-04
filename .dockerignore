@@ -1,0 +1,64 @@
+# =============================================================================
+# Docker Build Context Exclusions
+# =============================================================================
+# This file prevents unnecessary files from being sent to the Docker daemon.
+# Keep build-essential files (src/, package.json, bun.lock, tsconfig.json,
+# config.example.yaml) available in the build context.
+# =============================================================================
+
+# --- Dependencies (installed inside container) ---
+node_modules
+
+# --- Version Control ---
+.git
+.gitignore
+
+# --- Environment & Secrets ---
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# --- Runtime Config (volume-mounted at runtime, not baked into image) ---
+config.yaml
+
+# --- Keep example config available in image ---
+!config.example.yaml
+
+# --- Documentation (not needed in production image) ---
+*.md
+
+# --- Build Output ---
+out/
+dist/
+*.tgz
+
+# --- Code Coverage ---
+coverage/
+*.lcov
+
+# --- Logs ---
+logs/
+*.log
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# --- Caches ---
+.eslintcache
+.cache
+*.tsbuildinfo
+
+# --- Test Files (not needed in production image) ---
+test/
+
+# --- IDE & Editor Config ---
+.vscode/
+.idea/
+
+# --- OS Files ---
+.DS_Store
+
+# --- CI/CD & Project Management ---
+.sisyphus/
+AgentLogs/
