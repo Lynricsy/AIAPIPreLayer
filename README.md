@@ -320,6 +320,51 @@ test/
 config.yaml                # 默认配置文件
 ```
 
+## 🐳 Docker 部署
+
+除了直接运行，本项目也支持通过 Docker 一键部署。
+
+### 前提条件
+
+- Docker >= 20.10
+- Docker Compose >= 2.0
+
+### 快速启动
+
+```bash
+# 1. 复制配置文件模板
+cp config.example.yaml config.yaml
+
+# 2. 按需修改配置
+vim config.yaml
+
+# 3. 构建并启动
+docker compose up -d
+```
+
+服务启动后可通过 `docker compose logs -f` 查看实时日志，确认服务已就绪。
+
+### 常用命令
+
+| 命令 | 说明 |
+|------|------|
+| `docker compose up -d` | 后台启动服务 |
+| `docker compose down` | 停止并移除容器 |
+| `docker compose logs -f` | 查看实时日志 |
+| `docker compose build --no-cache` | 重新构建镜像 |
+| `docker compose restart` | 重启服务 |
+
+### 环境变量
+
+可通过环境变量覆盖 `config.yaml` 中的对应配置（在 `docker-compose.yml` 中取消注释即可）：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AIAPL_PORT` | `3000` | 服务端口 |
+| `AIAPL_HOST` | `0.0.0.0` | 监听地址 |
+
+> 💡 配置文件 `config.yaml` 通过只读 volume 挂载到容器内，修改后只需 `docker compose restart` 即可生效。
+
 ## 📄 License
 
 [MIT](./LICENSE)
