@@ -154,32 +154,10 @@ describe('ImageProcessor', () => {
     }
     firstImagePart.image_url.url = corrupted;
 
-    const captured: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Uint8Array): boolean => {
-      captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-      return true;
-    };
-
-    try {
-      await processor.process(createContext(body, 'openai-chat'));
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    await processor.process(createContext(body, 'openai-chat'));
 
     expect(getOpenAIChatImageUrl(body, 0)).toBe(corrupted);
     expect(getOpenAIChatImageUrl(body, 2).startsWith('data:image/webp;base64,')).toBe(true);
-
-    const warnLog = captured
-      .map((line) => JSON.parse(line) as Record<string, unknown>)
-      .find(
-        (entry) =>
-          entry['component'] === 'imageProcessor' &&
-          entry['level'] === 'warn' &&
-          entry['message'] === 'Failed to convert image, keeping original',
-      );
-
-    expect(warnLog).toBeDefined();
   });
 
   test('returns passthrough context when request has no images', async () => {

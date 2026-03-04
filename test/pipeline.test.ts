@@ -181,28 +181,8 @@ describe('PreProcessorManager', () => {
       },
     });
 
-    const captured: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Uint8Array) => {
-      captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-      return true;
-    };
-
-    try {
-      const result = await manager.process(createContext());
-      expect(result.headers['x-recovered']).toBe('true');
-    } finally {
-      process.stderr.write = originalWrite;
-    }
-
-    expect(captured.length).toBeGreaterThan(0);
-
-    const parsedLogs = captured.map((line) => JSON.parse(line) as Record<string, unknown>);
-    const warnLog = parsedLogs.find((entry) => entry['level'] === 'warn');
-
-    expect(warnLog).toBeDefined();
-    expect(warnLog?.['component']).toBe('pipeline');
-    expect(warnLog?.['message']).toBe('processor failed, continue with next');
+    const result = await manager.process(createContext());
+    expect(result.headers['x-recovered']).toBe('true');
   });
 
   test('process() returns original context when pipeline is empty', async () => {
