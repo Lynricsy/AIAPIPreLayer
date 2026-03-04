@@ -1,11 +1,12 @@
 import { test, expect, describe } from 'bun:test';
+import { PassThrough } from 'stream';
 import {
   ProcessorError,
   PayloadTooLargeError,
   ConfigValidationError,
   RoutingError,
 } from '../src/utils/errors';
-import { createLogger } from '../src/utils/logger';
+import { createLogger, _setRootLoggerForTest } from '../src/utils/logger';
 
 describe('ProcessorError', () => {
   test('has correct name, message, processorName, and originalError', () => {
@@ -67,71 +68,69 @@ describe('All errors are instanceof Error', () => {
 });
 
 describe('createLogger', () => {
-  test('info level logger suppresses debug messages', () => {
-    const captured: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Uint8Array) => {
-      captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-      return true;
+  function createCaptureStream() {
+    const stream = new PassThrough();
+    const chunks: string[] = [];
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
+    return {
+      stream,
+      lines: () =>
+        chunks
+          .join('')
+          .split('\n')
+          .filter((l) => l.trim().length > 0)
+          .map((l) => JSON.parse(l) as Record<string, unknown>),
     };
+  }
 
-    try {
-      const logger = createLogger('test-component', 'info');
-      logger.debug('this should be suppressed');
-      logger.info('this should appear');
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+  function flush(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 50));
+  }
 
-    expect(captured).toHaveLength(1);
-    const parsed = JSON.parse(captured[0]!) as Record<string, unknown>;
-    expect(parsed['level']).toBe('info');
-    expect(parsed['message']).toBe('this should appear');
-    expect(parsed['component']).toBe('test-component');
+  test('info level logger suppresses debug messages', async () => {
+    const { stream, lines } = createCaptureStream();
+    _setRootLoggerForTest('debug', stream);
+    const logger = createLogger('test-component', 'info');
+
+    logger.debug('this should be suppressed');
+    logger.info('this should appear');
+    await flush();
+
+    const entries = lines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['level']).toBe(30);
+    expect(entries[0]!['msg']).toBe('this should appear');
+    expect(entries[0]!['component']).toBe('test-component');
   });
 
-  test('error messages always shown regardless of level', () => {
-    const captured: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Uint8Array) => {
-      captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-      return true;
-    };
+  test('error messages always shown regardless of level', async () => {
+    const { stream, lines } = createCaptureStream();
+    _setRootLoggerForTest('debug', stream);
+    const logger = createLogger('test-component', 'warn');
 
-    try {
-      const logger = createLogger('test-component', 'warn');
-      logger.debug('suppressed');
-      logger.info('suppressed');
-      logger.warn('warn shown');
-      logger.error('error shown');
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    logger.debug('suppressed');
+    logger.info('suppressed');
+    logger.warn('warn shown');
+    logger.error('error shown');
+    await flush();
 
-    expect(captured).toHaveLength(2);
-    const warn = JSON.parse(captured[0]!) as Record<string, unknown>;
-    const error = JSON.parse(captured[1]!) as Record<string, unknown>;
-    expect(warn['level']).toBe('warn');
-    expect(error['level']).toBe('error');
+    const entries = lines();
+    expect(entries).toHaveLength(2);
+    expect(entries[0]!['level']).toBe(40);
+    expect(entries[1]!['level']).toBe(50);
   });
 
-  test('logger includes metadata when provided', () => {
-    const captured: string[] = [];
-    const originalWrite = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (chunk: string | Uint8Array) => {
-      captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-      return true;
-    };
+  test('logger includes metadata when provided', async () => {
+    const { stream, lines } = createCaptureStream();
+    _setRootLoggerForTest('debug', stream);
+    const logger = createLogger('meta-test');
 
-    try {
-      const logger = createLogger('meta-test');
-      logger.info('with meta', { requestId: '123', status: 200 });
-    } finally {
-      process.stderr.write = originalWrite;
-    }
+    logger.info('with meta', { requestId: '123', status: 200 });
+    await flush();
 
-    expect(captured).toHaveLength(1);
-    const parsed = JSON.parse(captured[0]!) as Record<string, unknown>;
-    expect(parsed['metadata']).toEqual({ requestId: '123', status: 200 });
+    const entries = lines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['requestId']).toBe('123');
+    expect(entries[0]!['status']).toBe(200);
   });
 });
