@@ -26,6 +26,11 @@ export function initLogger(config: LoggingConfig): void {
   }
 }
 
+/** @internal 仅用于测试：替换 rootLogger 的底层流 */
+export function _setRootLoggerForTest(level: LogLevel, stream: pino.DestinationStream): void {
+  rootLogger = pino({ level }, stream);
+}
+
 export function createLogger(component: string, level: LogLevel = 'info'): Logger {
   const child = rootLogger.child({ component });
   child.level = level;

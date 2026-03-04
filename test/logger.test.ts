@@ -1,26 +1,32 @@
-import { describe, expect, test } from 'bun:test';
-import { createLogger } from '../src/utils/logger.js';
+import { describe, expect, test, beforeEach } from 'bun:test';
+import { PassThrough } from 'stream';
+import { createLogger, initLogger, _setRootLoggerForTest } from '../src/utils/logger.js';
+import type { LogLevel } from '../src/utils/logger.js';
 
-function captureStderr(run: () => void): string[] {
-  const captured: string[] = [];
-  const originalWrite = process.stderr.write.bind(process.stderr);
+function createCaptureStream(): { stream: PassThrough; lines: () => Record<string, unknown>[] } {
+  const stream = new PassThrough();
+  const chunks: string[] = [];
+  stream.on('data', (chunk: Buffer) => chunks.push(chunk.toString()));
 
-  process.stderr.write = (chunk: string | Uint8Array): boolean => {
-    captured.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
-    return true;
+  return {
+    stream,
+    lines: () =>
+      chunks
+        .join('')
+        .split('\n')
+        .filter((l) => l.trim().length > 0)
+        .map((l) => JSON.parse(l) as Record<string, unknown>),
   };
-
-  try {
-    run();
-  } finally {
-    process.stderr.write = originalWrite;
-  }
-
-  return captured;
 }
 
-function parseEntry(line: string): Record<string, unknown> {
-  return JSON.parse(line.trim()) as Record<string, unknown>;
+function setupTest(level: LogLevel = 'debug') {
+  const { stream, lines } = createCaptureStream();
+  _setRootLoggerForTest(level, stream);
+  return { lines, stream };
+}
+
+function flush(stream: PassThrough): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 describe('createLogger', () => {
@@ -33,79 +39,112 @@ describe('createLogger', () => {
     expect(typeof logger.error).toBe('function');
   });
 
-  test('filters debug logs when level is info', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('level-filter-info', 'info');
-      logger.debug('hidden');
-      logger.info('visible');
-    });
+  test('filters debug logs when level is info', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('level-filter-info', 'info');
 
-    expect(output).toHaveLength(1);
-    expect(parseEntry(output[0] ?? '')['level']).toBe('info');
+    logger.debug('hidden');
+    logger.info('visible');
+    await flush(stream);
+
+    const entries = lines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['level']).toBe(30);
+    expect(entries[0]!['msg']).toBe('visible');
   });
 
-  test('filters info logs when level is warn', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('level-filter-warn', 'warn');
-      logger.info('hidden');
-      logger.warn('visible-warn');
-      logger.error('visible-error');
-    });
+  test('filters info logs when level is warn', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('level-filter-warn', 'warn');
 
-    expect(output).toHaveLength(2);
-    const levels = output.map((line) => parseEntry(line)['level']);
-    expect(levels).toEqual(['warn', 'error']);
+    logger.info('hidden');
+    logger.warn('visible-warn');
+    logger.error('visible-error');
+    await flush(stream);
+
+    const entries = lines();
+    expect(entries).toHaveLength(2);
+    expect(entries.map((e) => e['level'])).toEqual([40, 50]);
   });
 
-  test('emits all levels when logger level is debug', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('level-debug', 'debug');
-      logger.debug('d');
-      logger.info('i');
-      logger.warn('w');
-      logger.error('e');
-    });
+  test('emits all levels when logger level is debug', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('level-debug', 'debug');
 
-    expect(output).toHaveLength(4);
-    const levels = output.map((line) => parseEntry(line)['level']);
-    expect(levels).toEqual(['debug', 'info', 'warn', 'error']);
+    logger.debug('d');
+    logger.info('i');
+    logger.warn('w');
+    logger.error('e');
+    await flush(stream);
+
+    const entries = lines();
+    expect(entries).toHaveLength(4);
+    expect(entries.map((e) => e['level'])).toEqual([20, 30, 40, 50]);
   });
 
-  test('writes newline-delimited JSON entries with core fields', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('json-shape', 'debug');
-      logger.info('hello world');
-    });
+  test('writes newline-delimited JSON with pino core fields', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('json-shape', 'debug');
 
-    expect(output).toHaveLength(1);
-    expect(output[0]?.endsWith('\n')).toBe(true);
+    logger.info('hello world');
+    await flush(stream);
 
-    const entry = parseEntry(output[0] ?? '');
-    expect(entry['level']).toBe('info');
+    const entries = lines();
+    expect(entries).toHaveLength(1);
+
+    const entry = entries[0]!;
+    expect(entry['level']).toBe(30);
+    expect(entry['msg']).toBe('hello world');
     expect(entry['component']).toBe('json-shape');
-    expect(entry['message']).toBe('hello world');
-    const timestamp = entry['timestamp'];
-    expect(typeof timestamp).toBe('string');
-    expect(Number.isNaN(Date.parse(String(timestamp)))).toBe(false);
+    expect(typeof entry['time']).toBe('number');
+    expect(typeof entry['pid']).toBe('number');
+    expect(typeof entry['hostname']).toBe('string');
   });
 
-  test('omits metadata field when metadata is not provided', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('metadata-optional');
-      logger.info('without metadata');
-    });
+  test('spreads metadata at top level when metadata is provided', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('metadata-present', 'debug');
 
-    const entry = parseEntry(output[0] ?? '');
+    logger.error('with metadata', { requestId: 'req-1', retry: 2 });
+    await flush(stream);
+
+    const entry = lines()[0]!;
+    expect(entry['requestId']).toBe('req-1');
+    expect(entry['retry']).toBe(2);
+    expect(entry['msg']).toBe('with metadata');
     expect('metadata' in entry).toBe(false);
   });
 
-  test('includes metadata field when metadata is provided', () => {
-    const output = captureStderr(() => {
-      const logger = createLogger('metadata-present', 'debug');
-      logger.error('with metadata', { requestId: 'req-1', retry: 2 });
-    });
+  test('omits extra keys when metadata is not provided', async () => {
+    const { lines, stream } = setupTest('debug');
+    const logger = createLogger('metadata-optional');
 
-    const entry = parseEntry(output[0] ?? '');
-    expect(entry['metadata']).toEqual({ requestId: 'req-1', retry: 2 });
+    logger.info('without metadata');
+    await flush(stream);
+
+    const entry = lines()[0]!;
+    expect(entry['msg']).toBe('without metadata');
+    expect('requestId' in entry).toBe(false);
+    expect('metadata' in entry).toBe(false);
+  });
+});
+
+describe('initLogger', () => {
+  test('reconfigures root logger for json format', async () => {
+    const { lines, stream } = setupTest('info');
+    const logger = createLogger('init-test');
+
+    logger.info('after init');
+    await flush(stream);
+
+    const entries = lines();
+    expect(entries.length).toBeGreaterThanOrEqual(1);
+    expect(entries[0]!['component']).toBe('init-test');
+  });
+
+  test('text format does not throw', () => {
+    expect(() => {
+      initLogger({ level: 'info', format: 'text' });
+    }).not.toThrow();
   });
 });
