@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { loadConfig } from './config.ts';
 import { createProxyHandler } from './proxy.ts';
 import { createProcessorRegistry } from './registry.ts';
-import { createLogger } from './utils/logger.ts';
+import { createLogger, initLogger } from './utils/logger.ts';
 
 const config = loadConfig();
 const pipeline = createProcessorRegistry(config);
@@ -12,6 +12,7 @@ const app = new Hono();
 
 app.all('/*', (c) => proxyHandler(c.req.raw));
 
+initLogger(config.logging);
 const logger = createLogger('server', config.logging.level);
 
 if (import.meta.main) {
