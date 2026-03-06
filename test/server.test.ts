@@ -22,4 +22,11 @@ describe('server entrypoint', () => {
     expect(response).toBeInstanceOf(Response);
     expect(response.status).toBe(400);
   });
+
+  test('health endpoint returns ok without entering proxy routing', async () => {
+    const response = await app.fetch(new Request('http://localhost/health'));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: 'ok' });
+  });
 });

@@ -5,15 +5,21 @@ import { createProcessorRegistry } from './registry.ts';
 import { createLogger, initLogger } from './utils/logger.ts';
 
 const config = loadConfig();
+initLogger(config.logging);
 const pipeline = createProcessorRegistry(config);
 const proxyHandler = createProxyHandler(pipeline, config);
 
 const app = new Hono();
 
+app.get('/health', (c) =>
+  c.json({
+    status: 'ok',
+  }),
+);
+
 app.all('/*', (c) => proxyHandler(c.req.raw));
 
-initLogger(config.logging);
-const logger = createLogger('server', config.logging.level);
+const logger = createLogger('server');
 
 if (import.meta.main) {
   logger.info('Server started', {

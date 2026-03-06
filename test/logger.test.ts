@@ -53,6 +53,20 @@ describe('createLogger', () => {
     expect(entries[0]!['msg']).toBe('visible');
   });
 
+  test('inherits root logger level when explicit level is omitted', async () => {
+    const { lines, stream } = setupTest('info');
+    const logger = createLogger('inherit-root-level');
+
+    logger.debug('hidden');
+    logger.info('visible');
+    await flush(stream);
+
+    const entries = lines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['level']).toBe(30);
+    expect(entries[0]!['msg']).toBe('visible');
+  });
+
   test('filters info logs when level is warn', async () => {
     const { lines, stream } = setupTest('debug');
     const logger = createLogger('level-filter-warn', 'warn');
@@ -99,6 +113,24 @@ describe('createLogger', () => {
     expect(typeof entry['time']).toBe('number');
     expect(typeof entry['pid']).toBe('number');
     expect(typeof entry['hostname']).toBe('string');
+  });
+
+  test('uses latest root logger even when created before reconfiguration', async () => {
+    const first = setupTest('info');
+    const logger = createLogger('late-reconfigure');
+    const second = setupTest('debug');
+
+    logger.debug('after reconfigure');
+    await flush(first.stream);
+    await flush(second.stream);
+
+    expect(first.lines()).toHaveLength(0);
+
+    const entries = second.lines();
+    expect(entries).toHaveLength(1);
+    expect(entries[0]!['component']).toBe('late-reconfigure');
+    expect(entries[0]!['level']).toBe(20);
+    expect(entries[0]!['msg']).toBe('after reconfigure');
   });
 
   test('spreads metadata at top level when metadata is provided', async () => {

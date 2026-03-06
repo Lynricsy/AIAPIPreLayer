@@ -31,12 +31,22 @@ export function _setRootLoggerForTest(level: LogLevel, stream: pino.DestinationS
   rootLogger = pino({ level }, stream);
 }
 
-export function createLogger(component: string, level: LogLevel = 'info'): Logger {
+function getChildLogger(component: string, level?: LogLevel): pino.Logger {
   const child = rootLogger.child({ component });
-  child.level = level;
+
+  if (level !== undefined) {
+    child.level = level;
+  }
+
+  return child;
+}
+
+export function createLogger(component: string, level?: LogLevel): Logger {
 
   const wrap = (lvl: LogLevel) => {
     return (message: string, metadata?: Record<string, unknown>): void => {
+      const child = getChildLogger(component, level);
+
       if (metadata) {
         child[lvl]({ ...metadata }, message);
       } else {

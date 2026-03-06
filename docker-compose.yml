@@ -23,15 +23,16 @@ services:
       - ./config.yaml:/app/config.yaml:ro
     # 重启策略：除手动停止外自动重启（适合生产部署）
     restart: unless-stopped
-    # 健康检查：通过 bun 内置 fetch 检测服务是否响应
+    # 健康检查：通过 bun 内置 fetch 检测专用健康检查端点
     # 使用 bun -e 而非 curl，因为 oven/bun:1-slim 基础镜像未预装 curl
     healthcheck:
-      test: ["CMD-SHELL", "bun -e \"try { await fetch('http://localhost:3000/'); process.exit(0); } catch { process.exit(1); }\""]
+      test: ["CMD-SHELL", "bun -e \"try { const res = await fetch('http://localhost:3000/health'); process.exit(res.ok ? 0 : 1); } catch { process.exit(1); }\""]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
-    # 环境变量（按需取消注释以覆盖默认值）
-    # environment:
+    # 环境变量（按需覆盖默认值）
+    environment:
+      - AIAPL_LOG_FORMAT=text
     #   - AIAPL_PORT=3000
     #   - AIAPL_HOST=0.0.0.0
