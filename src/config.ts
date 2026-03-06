@@ -47,6 +47,17 @@ export const DEFAULT_CONFIG: AppConfig = {
   },
 };
 
+const VALID_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+const VALID_LOG_FORMATS = ['json', 'text'] as const;
+
+function isLogLevel(value: string): value is LoggingConfig['level'] {
+  return (VALID_LOG_LEVELS as readonly string[]).includes(value);
+}
+
+function isLogFormat(value: string): value is LoggingConfig['format'] {
+  return (VALID_LOG_FORMATS as readonly string[]).includes(value);
+}
+
 function validatePort(port: number): void {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`无效的端口号: ${port}，端口必须在 1-65535 范围内`);
@@ -183,15 +194,8 @@ function parseLoggingConfig(raw: unknown): LoggingConfig {
   const levelRaw = getStr(raw, 'level') ?? def.level;
   const formatRaw = getStr(raw, 'format') ?? def.format;
 
-  const validLevels = ['debug', 'info', 'warn', 'error'] as const;
-  const validFormats = ['json', 'text'] as const;
-
-  const level = (validLevels as readonly string[]).includes(levelRaw)
-    ? (levelRaw as LoggingConfig['level'])
-    : def.level;
-  const format = (validFormats as readonly string[]).includes(formatRaw)
-    ? (formatRaw as LoggingConfig['format'])
-    : def.format;
+  const level = isLogLevel(levelRaw) ? levelRaw : def.level;
+  const format = isLogFormat(formatRaw) ? formatRaw : def.format;
 
   return { level, format };
 }
@@ -207,6 +211,8 @@ function parseAppConfig(raw: unknown): AppConfig {
 function applyEnvOverrides(config: AppConfig): AppConfig {
   const portEnv = process.env['AIAPL_PORT'];
   const hostEnv = process.env['AIAPL_HOST'];
+  const logLevelEnv = process.env['AIAPL_LOG_LEVEL'];
+  const logFormatEnv = process.env['AIAPL_LOG_FORMAT'];
 
   let port = config.server.port;
   if (portEnv !== undefined) {
@@ -218,11 +224,31 @@ function applyEnvOverrides(config: AppConfig): AppConfig {
   }
 
   const host = hostEnv ?? config.server.host;
+  const logLevel = logLevelEnv ?? config.logging.level;
+  const logFormat = logFormatEnv ?? config.logging.format;
+
+  if (!isLogLevel(logLevel)) {
+    throw new Error(
+      `环境变量 AIAPL_LOG_LEVEL 值无效: "${logLevel}"，必须是 ${VALID_LOG_LEVELS.join(' / ')}`,
+    );
+  }
+
+  if (!isLogFormat(logFormat)) {
+    throw new Error(
+      `环境变量 AIAPL_LOG_FORMAT 值无效: "${logFormat}"，必须是 ${VALID_LOG_FORMATS.join(' / ')}`,
+    );
+  }
+
   validatePort(port);
 
   return {
     ...config,
     server: { ...config.server, port, host },
+    logging: {
+      ...config.logging,
+      level: logLevel,
+      format: logFormat,
+    },
   };
 }
 

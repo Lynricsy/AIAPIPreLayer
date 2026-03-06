@@ -21,12 +21,16 @@ describe('loadConfig', () => {
   beforeEach(() => {
     delete process.env['AIAPL_PORT'];
     delete process.env['AIAPL_HOST'];
+    delete process.env['AIAPL_LOG_LEVEL'];
+    delete process.env['AIAPL_LOG_FORMAT'];
   });
 
   afterEach(() => {
     removeTmpConfig();
     delete process.env['AIAPL_PORT'];
     delete process.env['AIAPL_HOST'];
+    delete process.env['AIAPL_LOG_LEVEL'];
+    delete process.env['AIAPL_LOG_FORMAT'];
   });
 
   test('从 config.yaml 加载配置返回正确值', () => {
@@ -112,9 +116,29 @@ logging:
     expect(config.server.host).toBe('127.0.0.1');
   });
 
+  test('AIAPL_LOG_LEVEL 与 AIAPL_LOG_FORMAT 环境变量覆盖日志配置', () => {
+    process.env['AIAPL_LOG_LEVEL'] = 'debug';
+    process.env['AIAPL_LOG_FORMAT'] = 'text';
+
+    const config = loadConfig('./config.yaml');
+
+    expect(config.logging.level).toBe('debug');
+    expect(config.logging.format).toBe('text');
+  });
+
   test('AIAPL_PORT 为非数字时抛出错误', () => {
     process.env['AIAPL_PORT'] = 'not-a-number';
     expect(() => loadConfig('./config.yaml')).toThrow(/AIAPL_PORT/);
+  });
+
+  test('AIAPL_LOG_LEVEL 非法时抛出错误', () => {
+    process.env['AIAPL_LOG_LEVEL'] = 'trace';
+    expect(() => loadConfig('./config.yaml')).toThrow(/AIAPL_LOG_LEVEL/);
+  });
+
+  test('AIAPL_LOG_FORMAT 非法时抛出错误', () => {
+    process.env['AIAPL_LOG_FORMAT'] = 'pretty';
+    expect(() => loadConfig('./config.yaml')).toThrow(/AIAPL_LOG_FORMAT/);
   });
 
   test('端口为 0 时抛出错误', () => {
