@@ -27,6 +27,7 @@ const baseConfig: AppConfig = {
       maxRetries: 2,
       preambleTimeoutMs: 5000,
     },
+    serviceTier: { enabled: true, value: 'priority' },
   },
   logging: {
     level: 'info',
@@ -35,12 +36,13 @@ const baseConfig: AppConfig = {
 };
 
 describe('createProcessorRegistry', () => {
-  test('image processor enabled → pipeline has 1 processor named imageProcessor', () => {
+  test('image processor enabled → pipeline includes imageProcessor', () => {
     const config: AppConfig = {
       ...baseConfig,
       processors: {
         image: { ...baseConfig.processors.image, enabled: true },
         encryptedReasoning: { ...baseConfig.processors.encryptedReasoning },
+        serviceTier: { enabled: false, value: 'priority' },
       },
     };
 
@@ -51,12 +53,13 @@ describe('createProcessorRegistry', () => {
     expect(processors[0]?.name).toBe('imageProcessor');
   });
 
-  test('image processor disabled → pipeline has 0 processors', () => {
+  test('all processors disabled → pipeline has 0 processors', () => {
     const config: AppConfig = {
       ...baseConfig,
       processors: {
         image: { ...baseConfig.processors.image, enabled: false },
         encryptedReasoning: { ...baseConfig.processors.encryptedReasoning },
+        serviceTier: { enabled: false, value: 'priority' },
       },
     };
 
@@ -66,12 +69,13 @@ describe('createProcessorRegistry', () => {
     expect(processors).toHaveLength(0);
   });
 
-  test('default config → processor registered (default enabled=true)', () => {
+  test('default config → all default processors registered', () => {
     const manager = createProcessorRegistry(DEFAULT_CONFIG);
     const processors = manager.getProcessors();
 
-    expect(processors).toHaveLength(1);
-    expect(processors[0]?.name).toBe('imageProcessor');
+    expect(processors).toHaveLength(2);
+    expect(processors.map(p => p.name)).toContain('imageProcessor');
+    expect(processors.map(p => p.name)).toContain('serviceTierProcessor');
   });
 
   test('returns a new PreProcessorManager instance each call', () => {

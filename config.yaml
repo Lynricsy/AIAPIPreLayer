@@ -40,6 +40,13 @@ processors:
     # SSE 前导事件缓冲超时时长（毫秒，1000-30000）：在此时间内未收到错误则认为请求正常
     preambleTimeoutMs: 5000
 
+  # Service Tier 处理器（仅作用于 OpenAI Responses API）
+  serviceTier:
+    # 是否启用 service_tier 注入
+    enabled: true
+    # 注入的 service_tier 值
+    value: "priority"
+
 # 日志配置
 logging:
   # 日志级别：debug | info | warn | error

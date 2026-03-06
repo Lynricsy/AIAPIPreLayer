@@ -58,10 +58,17 @@ export interface EncryptedReasoningProcessorConfig {
   preambleTimeoutMs: number;
 }
 
+/** Service Tier 处理器配置 */
+export interface ServiceTierProcessorConfig {
+  enabled: boolean;
+  value: string;
+}
+
 /** 处理器配置 */
 export interface ProcessorsConfig {
   image: ImageProcessorConfig;
   encryptedReasoning: EncryptedReasoningProcessorConfig;
+  serviceTier: ServiceTierProcessorConfig;
 }
 
 /** 应用整体配置 */

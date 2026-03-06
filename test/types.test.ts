@@ -40,6 +40,7 @@ const mockConfig: AppConfig = {
       maxRetries: 2,
       preambleTimeoutMs: 5000,
     },
+    serviceTier: { enabled: true, value: 'priority' },
   },
   logging: {
     level: 'info',

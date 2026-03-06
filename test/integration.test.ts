@@ -113,6 +113,9 @@ function createTestConfig(imageEnabled = true): AppConfig {
       encryptedReasoning: {
         ...DEFAULT_CONFIG.processors.encryptedReasoning,
       },
+      serviceTier: {
+        ...DEFAULT_CONFIG.processors.serviceTier,
+      },
     },
     logging: {
       ...DEFAULT_CONFIG.logging,

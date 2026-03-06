@@ -9,6 +9,7 @@ import type {
   ImageResizeConfig,
   LoggingConfig,
   EncryptedReasoningProcessorConfig,
+  ServiceTierProcessorConfig,
 } from './types/index.ts';
 
 export const DEFAULT_CONFIG: AppConfig = {
@@ -34,6 +35,10 @@ export const DEFAULT_CONFIG: AppConfig = {
       enabled: true,
       maxRetries: 2,
       preambleTimeoutMs: 5000,
+    },
+    serviceTier: {
+      enabled: true,
+      value: 'priority',
     },
   },
   logging: {
@@ -148,10 +153,19 @@ function parseEncryptedReasoningConfig(raw: unknown): EncryptedReasoningProcesso
   };
 }
 
+function parseServiceTierConfig(raw: unknown): ServiceTierProcessorConfig {
+  const def = DEFAULT_CONFIG.processors.serviceTier;
+  return {
+    enabled: getBool(raw, 'enabled') ?? def.enabled,
+    value: getStr(raw, 'value') ?? def.value,
+  };
+}
+
 function parseProcessorsConfig(raw: unknown): ProcessorsConfig {
   return {
     image: parseImageProcessorConfig(getObj(raw, 'image')),
     encryptedReasoning: parseEncryptedReasoningConfig(getObj(raw, 'encryptedReasoning')),
+    serviceTier: parseServiceTierConfig(getObj(raw, 'serviceTier')),
   };
 }
 

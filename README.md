@@ -12,6 +12,7 @@
 - 🔄 **透明代理** — SSE 流式响应直通，对客户端完全透明
 - 🌐 **多 API 支持** — 兼容 OpenAI Chat / OpenAI Responses / Anthropic / Gemini 四种格式
 - ⚙️ **YAML 配置驱动** — 所有参数均可通过配置文件灵活调整
+- 🎯 **Service Tier 注入** — 为 OpenAI Responses API 请求自动注入 `service_tier` 字段，确保优先级队列
 - 🧩 **可扩展处理器管道** — 基于责任链模式，轻松添加自定义预处理器
 
 ## 🚀 快速开始
@@ -182,6 +183,9 @@ processors:
     resize:
       maxWidth: 2048           # 最大宽度（像素），超出则等比缩小
       maxHeight: 2048          # 最大高度（像素），超出则等比缩小
+  serviceTier:
+    enabled: true              # 是否启用 Service Tier 注入
+    value: "priority"          # 注入的 service_tier 值（仅对 OpenAI Responses API 生效）
 
 # 日志配置
 logging:
@@ -206,6 +210,11 @@ Client Request
 │  │  ┌───────────────────┐  │    │
 │  │  │  ImageProcessor   │  │    │
 │  │  │  base64 → WebP    │  │    │
+│  │  └───────────────────┘  │    │
+│  │          ↓              │    │
+│  │  ┌───────────────────┐  │    │
+│  │  │ ServiceTierProc.  │  │    │
+│  │  │ 注入 service_tier │  │    │
 │  │  └───────────────────┘  │    │
 │  │          ↓              │    │
 │  │  ┌───────────────────┐  │    │
@@ -284,6 +293,7 @@ src/
 │   └── api-formats.ts    # 四种 API 请求格式的类型定义
 ├── processors/
 │   ├── post-processor.ts  # 后处理器管道管理
+│   ├── service-tier.ts    # Service Tier 注入处理器
 │   └── image/
 │       ├── index.ts       # ImageProcessor 入口（组装遍历 + 转换）
 │       ├── traversal.ts   # JSON 遍历：按 API 格式定位 base64 图片节点
