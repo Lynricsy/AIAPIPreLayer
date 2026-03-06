@@ -1,68 +1,188 @@
 # AIAPIPreLayer
 
-> 🦊 AI API 预处理层 — 在请求到达大模型 API 之前，自动完成图片压缩等预处理工作的透明反向代理
+> AI API 预处理层 - 在请求到达大模型 API 之前，自动完成图片压缩、字段注入与流式失败恢复的透明反向代理。
 
 [![Bun](https://img.shields.io/badge/runtime-Bun-f9f1e1?logo=bun)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/lang-TypeScript-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](./LICENSE)
 
-## ✨ 功能特性
+## 功能特性
 
-- 🖼️ **图片格式转换** — 自动将请求中的 base64 图片转换为 WebP 格式，支持质量与尺寸控制
-- 🔄 **透明代理** — SSE 流式响应直通，对客户端完全透明
-- 🌐 **多 API 支持** — 兼容 OpenAI Chat / OpenAI Responses / Anthropic / Gemini 四种格式
-- ⚙️ **YAML 配置驱动** — 所有参数均可通过配置文件灵活调整
-- 🎯 **Service Tier 注入** — 为 OpenAI Responses API 请求自动注入 `service_tier` 字段，确保优先级队列
-- 🧩 **可扩展处理器管道** — 基于责任链模式，轻松添加自定义预处理器
+- 自动遍历 OpenAI Chat / OpenAI Responses / Anthropic / Gemini 请求中的 base64 图片，并转换为 WebP
+- 透明反向代理，SSE 流式响应直通，不改动认证头与查询参数
+- 为 OpenAI Responses 请求自动注入 `service_tier`
+- 针对 OpenAI Responses 的 `encrypted reasoning` 快速失败场景执行 best-effort 自动重试恢复
+- YAML 配置驱动，支持用环境变量覆盖监听地址、端口与日志输出模式
+- 处理器采用尽力而为策略，单个处理步骤失败时不会中断整个请求
 
-## 🚀 快速开始
+## 快速开始
 
 ```bash
-# 克隆仓库
-git clone git@github.com:Lynricsy/AIAPIPreLayer.git
-cd AIAPIPreLayer
-
 # 安装依赖
 bun install
 
-# 编辑配置文件（按需修改）
-vim config.yaml
+# 复制一份配置文件（也可以直接使用仓库中的 config.yaml）
+cp config.example.yaml config.yaml
 
-# 启动服务
+# 热重载启动
+bun run dev
+```
+
+生产运行：
+
+```bash
 bun run start
 ```
 
-服务启动后默认监听 `http://0.0.0.0:3000`。
+服务默认监听 `http://0.0.0.0:3000`。
 
-## 🌐 URL 格式
+如果 `config.yaml` 不存在，服务不会退出，而是自动回退到内建默认配置启动。
 
-AIAPIPreLayer 采用 **URL 内嵌目标地址** 的路由方式：
+## 代理 URL 规则
 
+AIAPIPreLayer 通过“路径首段嵌入目标主机”的方式决定要转发到哪里：
+
+```text
+http://localhost:3000/{目标主机}/{目标路径}
 ```
-http://localhost:3000/{目标主机}/{路径}
+
+例如：
+
+- `http://localhost:3000/api.openai.com/v1/chat/completions`
+- `http://localhost:3000/api.openai.com/v1/responses`
+- `http://localhost:3000/api.anthropic.com/v1/messages`
+- `http://localhost:3000/generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`
+
+规则说明：
+
+- 第一个路径段会被解析为目标主机
+- 剩余路径会原样拼接为目标 API 路径
+- 上游协议固定为 `https`
+- 查询参数会原样透传
+- 除了官方主机名匹配，也支持基于路径模式的兜底识别，适配带子路径的中继服务
+
+## 请求处理流程
+
+```text
+Client Request
+      |
+      v
+Routing + API 格式检测
+      |
+      v
+JSON 请求预处理管道
+  - ImageProcessor
+  - ServiceTierProcessor
+      |
+      v
+转发到上游 API
+      |
+      +--> OpenAI Responses SSE 前导事件分析
+              |
+              +--> 必要时执行 encrypted reasoning 两级重试
+      |
+      v
+Client Response
 ```
 
-第一个路径段作为目标主机名，其余部分作为请求路径，协议固定为 HTTPS。
+具体行为如下：
 
-### 支持的 API 端点
+1. `GET /health` 由 `src/index.ts` 直接返回健康状态，其余路径都由 `app.all('/*')` 进入代理
+2. `src/routing.ts` 解析目标主机、目标路径，并识别 API 格式
+3. 仅 `POST` / `PUT` / `PATCH` 的 JSON 请求体会进入预处理管道，其他请求原样转发
+4. `ImageProcessor` 会按 API 格式定位图片节点并尽力转成 WebP；单张图片失败会跳过并保留原值
+5. `ServiceTierProcessor` 仅对 OpenAI Responses 请求生效，会向根对象注入 `service_tier`
+6. 请求体若被修改，代理会重新计算 `content-length`
+7. 普通响应与 SSE 响应都会回传给客户端；SSE 默认直通，不做二次改写
+8. 只有命中 OpenAI Responses + encrypted reasoning 失败模式时，代理才会在 SSE 前导阶段执行自动重试
 
-| API 服务 | 代理 URL |
-|----------|----------|
-| OpenAI Chat | `http://localhost:3000/api.openai.com/v1/chat/completions` |
-| OpenAI Responses | `http://localhost:3000/api.openai.com/v1/responses` |
-| Anthropic | `http://localhost:3000/api.anthropic.com/v1/messages` |
-| Gemini | `http://localhost:3000/generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent` |
+## OpenAI Responses 的 encrypted reasoning 重试
 
-> 💡 只需将原本的 API 基础 URL 替换为 `http://localhost:3000/{原主机}` 即可，查询参数原样透传。
+这是当前代码里已经实现、但旧版 README 没有覆盖的重要能力。
 
-## 📝 使用示例
+触发条件：
+
+- 请求格式为 `openai-responses`
+- `processors.encryptedReasoning.enabled` 为 `true`
+- 请求体 `input` 中存在 reasoning 项，且包含 `encrypted_content`
+- SSE 前导事件在短时间内出现“创建 -> 进行中 -> 错误/失败，且没有输出事件”的快速失败模式
+
+重试策略分为两级：
+
+1. 第一次快速失败：删除最后一个 reasoning 条目的 `encrypted_content` 后重试
+2. 第二次快速失败：删除所有 reasoning 条目的 `encrypted_content` 后重试
+3. 若仍失败：返回最后一次失败响应对应的 SSE 事件流，并重新计算响应体长度
+
+相关配置：
+
+- `maxRetries`：最大重试次数，当前允许范围为 `1-5`
+- `preambleTimeoutMs`：SSE 前导事件缓冲超时，当前允许范围为 `1000-30000`
+
+补充说明：
+
+- 快速失败识别除了受 `preambleTimeoutMs` 影响，还要求失败发生在请求开始后的前 10 秒内
+- 当前只有两种降级请求形态：删除最后一个 `encrypted_content`，或删除全部 `encrypted_content`
+- 因此当 `maxRetries` 大于 `2` 时，后续重试只会重复发送“已删除全部”的请求体
+
+## 配置参考
+
+运行配置位于项目根目录的 `config.yaml`，完整字段如下：
+
+```yaml
+server:
+  port: 3000
+  host: "0.0.0.0"
+  maxPayloadSize: "50mb"
+
+processors:
+  image:
+    enabled: true
+    output:
+      format: "webp"
+      quality: 80
+      effort: 4
+    resize:
+      maxWidth: 2048
+      maxHeight: 2048
+
+  encryptedReasoning:
+    enabled: true
+    maxRetries: 2
+    preambleTimeoutMs: 5000
+
+  serviceTier:
+    enabled: true
+    value: "priority"
+
+logging:
+  level: "info"
+  format: "json"
+```
+
+环境变量覆盖：
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `AIAPL_PORT` | `3000` | 覆盖 `server.port` |
+| `AIAPL_HOST` | `0.0.0.0` | 覆盖 `server.host` |
+| `AIAPL_LOG_LEVEL` | `info` | 覆盖 `logging.level` |
+| `AIAPL_LOG_FORMAT` | `json` | 覆盖 `logging.format`，可切到 `text` 便于 `docker compose logs -f` 阅读 |
+
+配置注意事项：
+
+- `maxPayloadSize` 支持 `b` / `kb` / `mb` / `gb` 单位
+- 当前图片输出格式固定为 `webp`；即使在配置中填写其他值，运行时也会按 `webp` 处理
+- 处理器相关参数目前没有环境变量映射，需要通过 `config.yaml` 调整
+- 仅当配置文件不存在、读取失败或 YAML 解析失败时才会回退默认配置
+- 大多数字段在配置值非法时会直接拒绝启动；`logging.level` / `logging.format` 在 `config.yaml` 中会回退默认值，但对应的 `AIAPL_LOG_LEVEL` / `AIAPL_LOG_FORMAT` 环境变量会严格校验并拒绝非法值
+
+## 使用示例
 
 ### OpenAI Chat Completions
 
 ```bash
 curl http://localhost:3000/api.openai.com/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $API_KEY" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
   -d '{
     "model": "gpt-4o",
     "messages": [
@@ -82,12 +202,40 @@ curl http://localhost:3000/api.openai.com/v1/chat/completions \
   }'
 ```
 
+### OpenAI Responses
+
+```bash
+curl -X POST http://localhost:3000/api.openai.com/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -d '{
+    "model": "gpt-4o",
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "input_text", "text": "描述这张图片" },
+          {
+            "type": "input_image",
+            "image_url": "data:image/png;base64,iVBORw0KGgo..."
+          }
+        ]
+      }
+    ]
+  }'
+```
+
+说明：
+
+- `service_tier` 会按配置自动注入
+- 如果请求中包含 encrypted reasoning，代理会在满足条件时自动执行两级重试恢复；若重试耗尽，仍会把最后一次失败响应透传给客户端
+
 ### Anthropic Messages
 
 ```bash
 curl http://localhost:3000/api.anthropic.com/v1/messages \
   -H "Content-Type: application/json" \
-  -H "x-api-key: $API_KEY" \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
   -H "anthropic-version: 2023-06-01" \
   -d '{
     "model": "claude-sonnet-4-20250514",
@@ -105,31 +253,6 @@ curl http://localhost:3000/api.anthropic.com/v1/messages \
             }
           },
           { "type": "text", "text": "这张图片里有什么？" }
-        ]
-      }
-    ]
-  }'
-```
-
-> 🖼️ 请求中的 base64 图片会被自动转换为 WebP 格式，显著减小请求体积。
-
-### OpenAI Responses
-
-```bash
-curl -X POST http://localhost:3000/api.openai.com/v1/responses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -d '{
-    "model": "gpt-4o",
-    "input": [
-      {
-        "role": "user",
-        "content": [
-          { "type": "input_text", "text": "这张图片是什么？" },
-          {
-            "type": "input_image",
-            "image_url": "data:image/png;base64,iVBORw0KGgo..."
-          }
         ]
       }
     ]
@@ -159,222 +282,107 @@ curl -X POST "http://localhost:3000/generativelanguage.googleapis.com/v1beta/mod
   }'
 ```
 
-> 💡 所有格式的图片都会被自动检测并转换，无需额外配置。
+## 开发与测试
 
-## ⚙️ 配置参考
+常用命令：
 
-配置文件为项目根目录下的 `config.yaml`，完整选项如下：
+| 命令 | 说明 |
+|------|------|
+| `bun run dev` | 热重载开发模式 |
+| `bun run start` | 生产方式启动 |
+| `bun test` | 运行全部测试 |
+| `bun run typecheck` | 运行 TypeScript 类型检查 |
 
-```yaml
-# 服务器配置
-server:
-  port: 3000                  # 监听端口（环境变量：AIAPL_PORT）
-  host: "0.0.0.0"             # 监听地址（环境变量：AIAPL_HOST）
-  maxPayloadSize: "50mb"      # 请求体最大大小（支持 b/kb/mb/gb）
+当前测试覆盖包括：
 
-# 处理器配置
-processors:
-  image:
-    enabled: true              # 是否启用图片处理器
-    output:
-      format: "webp"           # 输出格式：webp | jpeg | png
-      quality: 80              # 输出质量（0-100）
-      effort: 4                # WebP 编码努力程度（0-6，越大压缩越好但越慢）
-    resize:
-      maxWidth: 2048           # 最大宽度（像素），超出则等比缩小
-      maxHeight: 2048          # 最大高度（像素），超出则等比缩小
-  serviceTier:
-    enabled: true              # 是否启用 Service Tier 注入
-    value: "priority"          # 注入的 service_tier 值（仅对 OpenAI Responses API 生效）
+- 配置加载与校验
+- 图片转换与遍历逻辑
+- 代理转发与 `content-length` 修正
+- SSE 事件解析与透传
+- OpenAI Responses 的 encrypted reasoning 重试逻辑
+- 真实代理链路的集成测试
 
-# 日志配置
-logging:
-  level: "info"                # 日志级别：debug | info | warn | error
-  format: "json"               # 日志格式：json | text
-```
+## 项目结构
 
-## 🏗️ 架构
-
-```
-Client Request
-      │
-      ▼
-┌─────────────────────────────────┐
-│         AIAPIPreLayer           │
-│                                 │
-│  URL 解析 → API 格式检测        │
-│      │                          │
-│      ▼                          │
-│  ┌─────────────────────────┐    │
-│  │    预处理器管道 (Pipeline)│    │
-│  │  ┌───────────────────┐  │    │
-│  │  │  ImageProcessor   │  │    │
-│  │  │  base64 → WebP    │  │    │
-│  │  └───────────────────┘  │    │
-│  │          ↓              │    │
-│  │  ┌───────────────────┐  │    │
-│  │  │ ServiceTierProc.  │  │    │
-│  │  │ 注入 service_tier │  │    │
-│  │  └───────────────────┘  │    │
-│  │          ↓              │    │
-│  │  ┌───────────────────┐  │    │
-│  │  │   ... 更多处理器   │  │    │
-│  │  └───────────────────┘  │    │
-│  └─────────────────────────┘    │
-│      │                          │
-│      ▼                          │
-│  转发请求 (SSE 流式直通)        │
-└─────────────────────────────────┘
-      │
-      ▼
-  Target API
-(OpenAI / Anthropic / Gemini)
-```
-
-### 🔍 工作原理
-
-以一次带图片的 OpenAI Chat 请求为例，完整流程如下：
-
-1. **客户端发起请求** — 将目标 API 地址嵌入代理 URL，例如 `http://proxy:3000/api.openai.com/v1/chat/completions`
-2. **URL 路由解析** — 代理从请求路径中提取目标主机 `api.openai.com` 和路径 `/v1/chat/completions`，拼接为 `https://api.openai.com/v1/chat/completions`
-3. **API 格式检测** — 根据主机名 + 路径模式自动识别请求属于哪种 API 格式（OpenAI Chat / Responses / Anthropic / Gemini），决定后续如何遍历请求体
-4. **请求体解析** — 读取 JSON 请求体，交由预处理器管道依次处理
-5. **图片节点遍历** — `ImageProcessor` 按照检测到的 API 格式，深度遍历 JSON 结构，定位所有 base64 编码的图片节点（不同格式的图片字段位置各不相同）
-6. **图片转换** — 对每个检测到的 base64 图片，通过 Sharp 解码、压缩、转换为 WebP 格式（可配置质量与尺寸上限），再重新编码为 base64 写回原位
-7. **转发请求** — 将处理后的请求体以正确的 `Content-Length` 转发到真实 API，原始请求头（含认证信息）原样透传
-8. **响应直通** — API 返回的响应（包括 SSE 流式响应）直接传回客户端，代理不做任何修改
-
-> 📦 **压缩效果**：以一张 1MB 的 PNG 截图为例，转换为 WebP 后通常可压缩到 100~300KB，token 花费不变但传输速度大幅提升。
-
-**各格式图片字段位置对照：**
-
-| API 格式 | 图片定位路径 | base64 存储方式 |
-|----------|------------|----------------|
-| OpenAI Chat | `messages[].content[].image_url.url` | data URI（`data:image/png;base64,...`） |
-| OpenAI Responses | `input[].content[].image_url` | data URI（`data:image/png;base64,...`） |
-| Anthropic | `messages[].content[].source.data` | 纯 base64 + `media_type` 字段 |
-| Gemini | `contents[].parts[].inlineData.data` | 纯 base64 + `mimeType` 字段 |
-
-## 🛠️ 开发指南
-
-```bash
-# 热重载开发模式
-bun run dev
-
-# 运行测试
-bun test
-
-# 类型检查
-bun run typecheck
-```
-
-### 技术栈
-
-| 组件 | 技术选型 |
-|------|----------|
-| 运行时 | [Bun](https://bun.sh) |
-| Web 框架 | [Hono](https://hono.dev) |
-| 图片处理 | [Sharp](https://sharp.pixelplumbing.com) |
-| 配置解析 | [yaml](https://eemeli.org/yaml/) |
-| 类型系统 | TypeScript (strict mode) |
-
-### 项目结构
-
-```
+```text
 src/
-├── index.ts               # 应用入口
-├── config.ts              # 配置加载与验证
-├── pipeline.ts            # 预处理器管道管理
-├── proxy.ts               # 代理引擎（请求转发 + SSE 直通）
-├── registry.ts            # 处理器注册中心
-├── routing.ts             # URL 路由解析 + API 格式检测
-├── types/
-│   ├── index.ts           # 核心类型定义
-│   └── api-formats.ts    # 四种 API 请求格式的类型定义
+├── index.ts                        # 应用入口
+├── config.ts                       # 配置加载、校验与默认值
+├── pipeline.ts                     # 预处理器责任链
+├── proxy.ts                        # 代理引擎、SSE 直通与重试
+├── registry.ts                     # 处理器注册中心
+├── routing.ts                      # 目标 URL 解析与 API 格式识别
 ├── processors/
-│   ├── post-processor.ts  # 后处理器管道管理
-│   ├── service-tier.ts    # Service Tier 注入处理器
+│   ├── encrypted-reasoning.ts      # encrypted reasoning 内容裁剪逻辑
+│   ├── post-processor.ts           # 后处理器扩展点（当前未启用）
+│   ├── service-tier.ts             # OpenAI Responses 的 service_tier 注入
 │   └── image/
-│       ├── index.ts       # ImageProcessor 入口（组装遍历 + 转换）
-│       ├── traversal.ts   # JSON 遍历：按 API 格式定位 base64 图片节点
-│       └── converter.ts   # 图片格式转换（base64 → WebP via Sharp）
+│       ├── index.ts                # 图片处理器入口
+│       ├── traversal.ts            # 按 API 格式定位图片节点
+│       └── converter.ts            # base64 图片转 WebP
+├── types/
+│   ├── index.ts                    # 核心类型与配置定义
+│   └── api-formats.ts              # 各类请求体类型
 └── utils/
-    ├── base64.ts          # Base64 编解码与 data URI 解析
-    ├── errors.ts          # 自定义错误类
-    ├── logger.ts          # 结构化日志
-    └── mime.ts            # MIME 类型工具
+    ├── base64.ts
+    ├── errors.ts
+    ├── logger.ts
+    ├── mime.ts
+    └── sse.ts
 
 test/
-├── fixtures/              # 测试用 JSON 固定数据
-│   ├── openai-chat.json
-│   ├── openai-responses.json
-│   ├── anthropic-messages.json
-│   ├── gemini-generate.json
-│   ├── mixed-content.json
-│   └── no-images.json
-├── config.test.ts
-├── converter.test.ts
-├── errors.test.ts
-├── image-processor.test.ts
-├── logger.test.ts
-├── pipeline.test.ts
-├── post-processor.test.ts
-├── proxy.test.ts
-├── registry.test.ts
-├── routing.test.ts
-├── server.test.ts
-├── traversal.test.ts
-├── types.test.ts
-└── utils.test.ts
-
-config.yaml                # 默认配置文件
+├── integration.test.ts             # 端到端代理集成测试
+├── proxy-retry.test.ts             # encrypted reasoning 重试专项测试
+├── sse.test.ts                     # SSE 解析与序列化测试
+└── ...                             # 其余配置、路由、处理器与工具测试
 ```
 
-## 🐳 Docker 部署
+## Docker 部署
 
-除了直接运行，本项目也支持通过 Docker 一键部署。
+项目提供 `Dockerfile` 和 `docker-compose.yml`，适合本地或服务器直接部署。
 
-### 前提条件
-
-- Docker >= 20.10
-- Docker Compose >= 2.0
-
-### 快速启动
+快速启动：
 
 ```bash
-# 1. 复制配置文件模板
 cp config.example.yaml config.yaml
-
-# 2. 按需修改配置
-vim config.yaml
-
-# 3. 构建并启动
 docker compose up -d
 ```
 
-服务启动后可通过 `docker compose logs -f` 查看实时日志，确认服务已就绪。
+部署说明：
 
-### 常用命令
+- Compose 会将 `./config.yaml` 以只读方式挂载到容器内的 `/app/config.yaml`
+- Docker 镜像基于 `oven/bun:1-slim`，并以非 root 的 `bun` 用户运行
+- 容器健康检查使用 `bun -e` 请求 `http://localhost:3000/health`，避免把 `/` 误当成代理目标
+- 默认 Compose 额外注入 `AIAPL_LOG_FORMAT=text`，让 `docker compose logs -f` 更适合人工阅读；若需要结构化采集，可改回 `json`
+
+常用命令：
 
 | 命令 | 说明 |
 |------|------|
 | `docker compose up -d` | 后台启动服务 |
 | `docker compose down` | 停止并移除容器 |
 | `docker compose logs -f` | 查看实时日志 |
-| `docker compose build --no-cache` | 重新构建镜像 |
 | `docker compose restart` | 重启服务 |
+| `docker compose build --no-cache` | 重新构建镜像 |
 
-### 环境变量
+如果在 Compose 场景下修改 `AIAPL_PORT`，还需要同步调整 `ports` 和 `healthcheck` 中写死的 `3000`，否则端口映射和健康检查会失真。
 
-可通过环境变量覆盖 `config.yaml` 中的对应配置（在 `docker-compose.yml` 中取消注释即可）：
+## 技术栈
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `AIAPL_PORT` | `3000` | 服务端口 |
-| `AIAPL_HOST` | `0.0.0.0` | 监听地址 |
+| 组件 | 说明 |
+|------|------|
+| Bun | 运行时与测试执行 |
+| Hono | HTTP 路由与请求处理 |
+| Sharp | 图片解码、压缩与 WebP 转换 |
+| yaml | YAML 配置解析 |
+| pino / pino-pretty | 结构化日志与文本日志输出 |
+| TypeScript | 严格类型约束 |
 
-> 💡 配置文件 `config.yaml` 通过只读 volume 挂载到容器内，修改后只需 `docker compose restart` 即可生效。
+## 注意事项
 
-## 📄 License
-
-[MIT](./LICENSE)
+- 图片处理只对可解析的 JSON 请求体生效，非 JSON 请求会原样透传
+- 单个处理器失败不会阻断整条请求链路，代理会记录告警并继续处理
+- 损坏的 base64 图片会被跳过并保留原值，而不是直接报错
+- 请求体超过 `maxPayloadSize` 会返回 `413 Payload Too Large`
+- 客户端主动断开连接时会记录为 `499 Client Closed Request`
+- 日志输出目标是标准错误流，便于与标准输出分离采集
